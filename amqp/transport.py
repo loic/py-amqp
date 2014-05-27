@@ -150,9 +150,11 @@ class _AbstractTransport(object):
     def read_frame(self, unpack=unpack):
         read = self._read
         try:
-            frame_type, channel, size = unpack('>BHI', read(7, True))
-            payload = read(size)
-            ch = ord(read(1))
+            frame_type, channel, size = unpack('>BHL', read(7, True))
+            if frame_type == 8:
+                print "<< RECEIVED HEARTBEAT FRAME on %r" % self
+            payload = read(size, True)
+            ch = ord(read(1, True))
         except socket.timeout:
             raise
         except (OSError, IOError, socket.error) as exc:
@@ -225,7 +227,7 @@ class SSLTransport(_AbstractTransport):
                 except socket.error as exc:
                     # ssl.sock.read may cause ENOENT if the
                     # operation couldn't be performed (Issue celery#1414).
-                    if not initial and exc.errno in _errnos:
+                    if not initial and get_errno(exc) in _errnos:
                         continue
                     raise
                 if not s:

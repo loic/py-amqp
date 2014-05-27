@@ -890,32 +890,31 @@ class Connection(AbstractChannel):
         """Send heartbeat packets, if necessary, and fail if none have been
         received recently.  This should be called frequently, on the order of
         once per second.
-
-        :keyword rate: Ignored
         """
         if not self.heartbeat:
             return
 
-        # treat actual data exchange in either direction as a heartbeat
+        now = monotonic()
         sent_now = self.method_writer.bytes_sent
         recv_now = self.method_reader.bytes_recv
+        print ('prev_recv: %s, recv_now: %s || prev_sent: %s, sent_now: %s on %r' %
+               (self.prev_recv, recv_now, self.prev_sent, sent_now, self.transport))
         if self.prev_sent is None or self.prev_sent != sent_now:
-            self.last_heartbeat_sent = monotonic()
+            self.last_heartbeat_sent = now
         if self.prev_recv is None or self.prev_recv != recv_now:
-            self.last_heartbeat_received = monotonic()
+            self.last_heartbeat_received = now
         self.prev_sent, self.prev_recv = sent_now, recv_now
-
-        # send a heartbeat if it's time to do so
-        if monotonic() > self.last_heartbeat_sent + self.heartbeat:
-            self.send_heartbeat()
-            self.last_heartbeat_sent = monotonic()
 
         # if we've missed two intervals' heartbeats, fail; this gives the
         # server enough time to send heartbeats a little late
-        if (self.last_heartbeat_received and
-                self.last_heartbeat_received + 2 *
-                self.heartbeat < monotonic()):
+        if now > self.last_heartbeat_received + self.heartbeat * 2:
             raise ConnectionForced('Too many heartbeats missed')
+
+        # send a heartbeat if it's time to do so
+        if now > self.last_heartbeat_sent + self.heartbeat / rate:
+            print ">> SENDING HEARTBEAT FRAME on %r" % self.transport
+            self.send_heartbeat()
+            self.method_writer.bytes_sent += 1
 
     def _x_tune_ok(self, channel_max, frame_max, heartbeat):
         """Negotiate connection tuning parameters
